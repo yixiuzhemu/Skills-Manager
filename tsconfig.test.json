@@ -1,0 +1,27 @@
+{
+  // Typecheck-only project for the unit tests under test/. The suites import
+  // the host transport (src/http.ts) and the client fetch wrapper
+  // (src/client/api.ts) directly, both of which are pure `import type` modules
+  // with no runtime edges, so the tests run on Node's native type stripping
+  // (`node --test`) with no bundler or extra dependency. This project mirrors
+  // the strictness of tsconfig.json so test code is held to the same bar.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "useDefineForClassFields": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["test"]
+}

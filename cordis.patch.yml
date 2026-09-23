@@ -1,0 +1,4 @@
+# dsh bundle patch: inserts this plugin into a profile's layer stack.
+- insert:
+    - id: skills-manager
+      name: '@dsh-skills-manager/dsh-skills-manager'
