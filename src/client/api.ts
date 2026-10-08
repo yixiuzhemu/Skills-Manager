@@ -10,7 +10,7 @@
  * bundle); `CompanySkillEntry` is defined here because its host definition lives
  * in a Node-only module.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client/api
+ * @module @dtranx/skills-manager/client/api
  */
 
 import type {

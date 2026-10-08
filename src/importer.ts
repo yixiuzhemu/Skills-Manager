@@ -5,7 +5,7 @@
  * new skill from a name/description/body. Every path returns the resulting
  * {@link SkillRecord}; persistence and event emission belong to the caller.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/importer
+ * @module @dtranx/skills-manager/importer
  */
 
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'

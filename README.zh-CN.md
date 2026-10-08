@@ -2,7 +2,7 @@
 
 [English](./README.md)
 
-> 包名：`@dsh-skills-manager/dsh-skills-manager`
+> 包名：`@dtranx/skills-manager`
 > DeepSeek Harness（DSH）的「双面」技能管理插件。
 
 Skills-Manager 将来自多个来源的 Agent Skills 统一到一个管理面板之后。它是

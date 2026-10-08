@@ -9,7 +9,7 @@
  * never on `react/jsx-runtime`. Copy arrives through the framework-injected `t`
  * bound to the `skills-manager` locale namespace.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client/section
+ * @module @dtranx/skills-manager/client/section
  */
 
 import * as React from 'react'

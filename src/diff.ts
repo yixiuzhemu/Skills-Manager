@@ -4,7 +4,7 @@
  * configurable context window, so the client can render an inline comparison
  * between a managed skill's current content and its latest upstream version.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/diff
+ * @module @dtranx/skills-manager/diff
  */
 
 import type { DiffHunk, DiffLine, DiffResult } from './types.ts'

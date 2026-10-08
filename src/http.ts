@@ -14,7 +14,7 @@
  * `application/json` content type. Read-only `GET` routes are exempt from the
  * marker but still origin-checked.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/http
+ * @module @dtranx/skills-manager/http
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http'

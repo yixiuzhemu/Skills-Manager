@@ -10,14 +10,14 @@
  * so the panel appears as a page inside the harness settings dialog. The host
  * half is reached only over the `fetch` HTTP seam in `./api.ts`.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client
+ * @module @dtranx/skills-manager/client
  */
 
 import { DICT, LOCALE_NAMESPACE } from './locales.ts'
 import { SkillManagerSection, type SectionProps, type Translate } from './section.ts'
 
 /** Loader-visible plugin name. */
-export const name = '@dsh-skills-manager/dsh-skills-manager/client'
+export const name = '@dtranx/skills-manager/client'
 
 /** Client services this entry consumes: the slot registry and the locale face. */
 export const inject = ['slots', 'locale']

@@ -2,7 +2,7 @@
 
 [中文](./README.zh-CN.md)
 
-> Package: `@dsh-skills-manager/dsh-skills-manager`
+> Package: `@dtranx/skills-manager`
 > A dual-face Skills management plugin for DeepSeek Harness (DSH).
 
 Skills-Manager unifies Agent Skills discovered from many sources behind one

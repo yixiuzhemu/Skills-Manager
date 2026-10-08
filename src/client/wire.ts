@@ -5,7 +5,7 @@
  * it renders here. These mirror the host interfaces field-for-field; the host
  * remains the source of truth and the two are kept in sync by hand.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client/wire
+ * @module @dtranx/skills-manager/client/wire
  */
 
 /** Where a skill was discovered or installed from. */

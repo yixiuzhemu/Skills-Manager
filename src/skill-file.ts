@@ -4,7 +4,7 @@
  * `SKILL.md` whose optional YAML frontmatter carries the routing metadata; the
  * body after the frontmatter block is the instruction content the model sees.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/skill-file
+ * @module @dtranx/skills-manager/skill-file
  */
 
 import { createHash } from 'node:crypto'

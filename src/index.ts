@@ -5,7 +5,7 @@
  * the store lifecycle through a Cordis effect. Augments the Cordis `Context` so
  * consumers read `ctx.skillsManager`, and re-exports the public vocabulary.
  *
- * @module @dsh-skills-manager/dsh-skills-manager
+ * @module @dtranx/skills-manager
  */
 
 import Schema from '@deepseek-ai/schemastery'

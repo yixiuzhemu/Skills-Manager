@@ -6,7 +6,7 @@
  * company `api` sources read a small JSON contract, and company `git` sources
  * reuse the repository path.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/github
+ * @module @dtranx/skills-manager/github
  */
 
 import type { CompanySkillSource, RepoSkillItem, SkillFrontmatter } from './types.ts'

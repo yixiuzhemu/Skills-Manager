@@ -4,7 +4,7 @@
  * with a monotonic revision for stale-write detection and a file watcher so
  * external changes are picked up without a restart.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/file-store
+ * @module @dtranx/skills-manager/file-store
  */
 
 import { watchFile, unwatchFile, existsSync } from 'node:fs'

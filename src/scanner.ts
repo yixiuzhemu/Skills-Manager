@@ -6,7 +6,7 @@
  * read-only: it never writes to a scanned location, and the reconciled enable
  * state lives with the registry service, not here.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/scanner
+ * @module @dtranx/skills-manager/scanner
  */
 
 import { stat } from 'node:fs/promises'

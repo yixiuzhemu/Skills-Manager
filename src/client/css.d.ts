@@ -4,7 +4,7 @@
  * the hashed local→global class map (default export) and injects the stylesheet
  * text as a `<style data-plugin>` tag at factory execution.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client/css
+ * @module @dtranx/skills-manager/client/css
  */
 
 declare module '*.module.css' {

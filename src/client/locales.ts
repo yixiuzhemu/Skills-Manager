@@ -4,7 +4,7 @@
  * registered settings section; `{name}` placeholders are substituted by the
  * locale service. Keys are flat and shared verbatim between `zh` and `en`.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/client/locales
+ * @module @dtranx/skills-manager/client/locales
  */
 
 /** The locale namespace this panel's copy is registered under. */

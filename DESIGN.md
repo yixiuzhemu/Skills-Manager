@@ -1,6 +1,6 @@
 # Skills-Manager 设计文档（DESIGN.md）
 
-> 包名：`@dsh-skills-manager/dsh-skills-manager`
+> 包名：`@dtranx/skills-manager`
 > 定位：DeepSeek Harness（DSH）的「双面」技能管理插件
 
 ## 1. 概述
@@ -115,7 +115,7 @@ Skills-Manager 是一个基于 [Cordis](https://cordis.js.org/) 插件体系的 
 
 - **入口**：`src/client/index.ts` → **产物**：`client/client.js`（`outDir: client`，`format: cjs`，`platform: browser`，`target: es2022`）。
 - **模块加载**：banner/footer 包裹为
-  `window.__ModuleLoader__.load({ id: "@dsh-skills-manager/dsh-skills-manager", factory: (require) => { ... return module.exports; } })`。
+  `window.__ModuleLoader__.load({ id: "@dtranx/skills-manager", factory: (require) => { ... return module.exports; } })`。
 - **外部依赖**：仅 `react` 走 loader 模块表（组件用 `React.createElement` 编写，不依赖 `react/jsx-runtime`，尽管后者也在 external 列表中以备将来改用 JSX）；其余（CSS Modules 等）全部内联（`noExternal`），因为 loader 表无法解析的 `require()` 会导致运行时抛错。
 - **CSS Modules**：自定义插件 `dsh-css-modules-inline` 通过虚拟 id（前缀 `\0dsh-css:`、后缀 `.mjs`，避开 tsdown 自身 `.css` 管线）用 `lightningcss` 编译；`import 'x.module.css'` 返回哈希类名映射，并在工厂执行时自动注入 `<style data-plugin>` 标签（卸载时由 loader 移除）。哈希基于仓库相对路径（posix 分隔符），保证跨平台（含 Windows）一致。
 - **不产 dts/sourcemap**：Host 类型由 `tsc` 提供；此处产 dts 会把 banner/footer 包进 `.d.cts` 破坏解析。
@@ -148,7 +148,7 @@ Skills-Manager 是一个基于 [Cordis](https://cordis.js.org/) 插件体系的 
 
 ### 5.6 加载补丁（`cordis.patch.yml`）
 
-DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dsh-skills-manager/dsh-skills-manager'` 插入到 profile 的 layer 栈中。
+DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dtranx/skills-manager'` 插入到 profile 的 layer 栈中。
 
 ### 5.7 单元测试（`test/` + `tsconfig.test.json`）
 

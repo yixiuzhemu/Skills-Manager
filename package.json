@@ -1,5 +1,5 @@
 {
-  "name": "@dsh-skills-manager/dsh-skills-manager",
+  "name": "@dtranx/skills-manager",
   "description": "Dual-face Skills manager plugin for deepseek-harness: the host half scans, imports, and manages skills from multiple sources; the client half renders a unified skills management panel under the settings section.",
   "version": "0.1.0",
   "license": "MIT",

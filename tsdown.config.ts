@@ -8,14 +8,14 @@
  * tag at factory execution (the loader removes plugin-owned tags on unload).
  *
  * scripts/preflight.mjs asserts the emitted client/client.js starts with the
- * exact `window.__ModuleLoader__.load({ id: "@dsh-skills-manager/dsh-skills-manager"` prefix.
+ * exact `window.__ModuleLoader__.load({ id: "@dtranx/skills-manager"` prefix.
  */
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, relative, resolve as resolvePath } from 'node:path'
 import { defineConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
-const id = '@dsh-skills-manager/dsh-skills-manager'
+const id = '@dtranx/skills-manager'
 
 /**
  * Externals resolved from the loader module table at runtime. The dsh client

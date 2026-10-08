@@ -9,7 +9,7 @@
  * remote-fetch logic lives in sibling modules; this file only sequences them,
  * persists results, and announces commits through Cordis events.
  *
- * @module @dsh-skills-manager/dsh-skills-manager/service
+ * @module @dtranx/skills-manager/service
  */
 
 import { mkdir, rename, rm } from 'node:fs/promises'
