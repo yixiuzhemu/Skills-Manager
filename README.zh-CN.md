@@ -32,6 +32,10 @@ Skills-Manager 将来自多个来源的 Agent Skills 统一到一个管理面板
 - **仓库源**——浏览 GitHub 仓库、列出其内部技能并安装。
 - **企业源**——注册 `api` / `git` 类型的企业端点，同步并安装其所提供的技能。
 - **更新与差异**——检查上游版本，并在应用更新前审阅内联的统一 diff。
+- **按需远程解析**——当其它 Host 插件通过
+  `ctx.skillsManager.resolveSkillById(id)` 索取一个本地未安装的技能时，
+  管理器可从单一配置的端点解析、下载预签名归档并安装。未配置
+  `remoteSkillResolver.baseUrl` 时该功能关闭；miss 绝不扩散到其它服务端。
 - **本地持久化**——数据以 JSON 文档存于 `~/.dsh/skills-manager/`，带修订号
   跟踪与文件监听。
 
@@ -113,6 +117,9 @@ Host 插件读取以下配置（均为可选；零配置默认值即解析为本
 | `githubToken` | `string` | `''` | 可选的 bearer 令牌，用于鉴权请求。 |
 | `trashRetentionDays` | `number` | `30` | 回收站技能在自动清除前的保留天数。 |
 | `scanOnStart` | `boolean` | `true` | 启动时是否执行一次发现扫描。 |
+| `remoteSkillResolver.baseUrl` | `string` | `''` | 按需远程技能的解析端点；**为空则禁用该功能**。 |
+| `remoteSkillResolver.token` | `string` | `''` | 可选 bearer 令牌，仅发给解析端点（绝不转发给下载主机）。 |
+| `remoteSkillResolver.timeoutMs` | `number` | `30000` | 解析 + 下载两步的单请求超时。 |
 
 ## 脚本
 
@@ -139,10 +146,11 @@ src/
   importer.ts     zip / folder / file 导入 + 创建
   diff.ts         LCS 统一 diff
   github.ts       GitHub 仓库源与企业源远程操作
+  remote-skill.ts 按需远程技能解析（按外部 id）
   skill-file.ts   SKILL.md 解析 / 序列化 / id 哈希
   types.ts        共享线协议词汇 + Cordis 事件增强
   client/         浏览器半边（面板、api 客户端、wire 类型、字典、样式）
-test/             node:test 用例（http + api）
+test/             node:test 用例（http + api + remote-skill）
 DESIGN.md         完整设计文档
 ```
 

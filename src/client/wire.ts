@@ -38,6 +38,7 @@ export interface SourceDetail {
   agentType?: 'codex' | 'claude' | 'copilot' | 'dsh'
   projectPath?: string
   companySourceId?: string
+  remoteSkillId?: string
 }
 
 /** One managed or discovered skill as the registry tracks it. */

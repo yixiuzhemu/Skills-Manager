@@ -81,21 +81,29 @@ async function importFile(sourcePath: string, managedRoot: string): Promise<Skil
   return managedRecord(id, abs, managedDir, raw, fallback)
 }
 
-/** Import a zip archive, extracting the subtree rooted at its SKILL.md. */
-async function importZip(sourcePath: string, managedRoot: string): Promise<SkillRecord> {
-  const abs = resolve(sourcePath)
-  if (!pathExists(abs)) throw new ImportError(`archive not found: ${abs}`)
-  const zip = await JSZip.loadAsync(await readFile(abs))
+/** The result of extracting a zip's SKILL.md subtree into a managed directory. */
+interface ExtractedZip {
+  /** The raw SKILL.md text at the subtree root. */
+  rawManifest: string
+  /** The archive-relative base directory the subtree was rooted at ('' for a root manifest). */
+  base: string
+}
+
+/**
+ * Extract the subtree rooted at an archive's SKILL.md into a managed directory.
+ * Shared by the path-based zip import and the byte-based remote install.
+ * @param bytes - the raw archive bytes.
+ * @param managedDir - absolute directory to materialize files into.
+ * @param label - human-readable source name used in error messages.
+ */
+async function extractZip(bytes: Uint8Array, managedDir: string, label: string): Promise<ExtractedZip> {
+  const zip = await JSZip.loadAsync(bytes)
   const filePaths = Object.keys(zip.files).filter(name => zip.files[name]?.dir !== true)
   const manifest = filePaths.find(name => name === SKILL_FILE)
     ?? filePaths.find(name => name.endsWith(`/${SKILL_FILE}`))
-  if (manifest === undefined) throw new ImportError(`no ${SKILL_FILE} inside archive: ${abs}`)
+  if (manifest === undefined) throw new ImportError(`no ${SKILL_FILE} inside archive: ${label}`)
   const base = manifest === SKILL_FILE ? '' : manifest.slice(0, manifest.length - SKILL_FILE.length)
-
-  const id = skillId('managed', abs)
-  const managedDir = managedDirFor(managedRoot, id)
   await mkdir(managedDir, { recursive: true })
-
   let rawManifest: string | undefined
   for (const name of filePaths) {
     if (!name.startsWith(base)) continue
@@ -104,13 +112,50 @@ async function importZip(sourcePath: string, managedRoot: string): Promise<Skill
     const entry = zip.files[name]
     if (entry === undefined) continue
     const target = join(managedDir, relative)
-    const bytes = await entry.async('uint8array')
+    const fileBytes = await entry.async('uint8array')
     await mkdir(dirname(target), { recursive: true })
-    await writeFile(target, bytes)
-    if (relative === SKILL_FILE) rawManifest = new TextDecoder().decode(bytes)
+    await writeFile(target, fileBytes)
+    if (relative === SKILL_FILE) rawManifest = new TextDecoder().decode(fileBytes)
   }
-  if (rawManifest === undefined) throw new ImportError(`failed to extract ${SKILL_FILE} from: ${abs}`)
+  if (rawManifest === undefined) throw new ImportError(`failed to extract ${SKILL_FILE} from: ${label}`)
+  return { rawManifest, base }
+}
+
+/** Import a zip archive, extracting the subtree rooted at its SKILL.md. */
+async function importZip(sourcePath: string, managedRoot: string): Promise<SkillRecord> {
+  const abs = resolve(sourcePath)
+  if (!pathExists(abs)) throw new ImportError(`archive not found: ${abs}`)
+  const id = skillId('managed', abs)
+  const managedDir = managedDirFor(managedRoot, id)
+  const { rawManifest, base } = await extractZip(await readFile(abs), managedDir, abs)
   return managedRecord(id, abs, managedDir, rawManifest, toKebabCase(base) || 'skill')
+}
+
+/** The materialization result of installing a skill from downloaded zip bytes. */
+export interface InstalledArchive {
+  /** Absolute managed directory the archive was extracted into. */
+  managedDir: string
+  /** The raw SKILL.md text, for frontmatter parsing by the caller. */
+  raw: string
+  /** A kebab-case fallback name derived from the archive's base directory. */
+  fallbackName: string
+}
+
+/**
+ * Materialize a skill from downloaded zip bytes into `managed/<id>/`. Unlike
+ * {@link importSkill}, the id is supplied by the caller (so a remotely resolved
+ * skill maps to a stable id) and no host source path is involved; persistence
+ * and record construction belong to the caller.
+ * @param bytes - the raw archive bytes (e.g. downloaded from a resolver).
+ * @param id - the managed skill id to materialize under.
+ * @param managedRoot - absolute managed-copy root directory.
+ * @returns the managed directory, the raw manifest text, and a fallback name.
+ * @throws {ImportError} when the archive holds no SKILL.md.
+ */
+export async function installFromZipBytes(bytes: Uint8Array, id: string, managedRoot: string): Promise<InstalledArchive> {
+  const managedDir = managedDirFor(managedRoot, id)
+  const { rawManifest, base } = await extractZip(bytes, managedDir, `archive:${id}`)
+  return { managedDir, raw: rawManifest, fallbackName: toKebabCase(base) || 'skill' }
 }
 
 /**

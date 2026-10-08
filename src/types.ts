@@ -69,6 +69,8 @@ export interface SourceDetail {
   agentType?: 'codex' | 'claude' | 'copilot' | 'dsh'
   projectPath?: string
   companySourceId?: string
+  /** External catalog id from the on-demand remote resolver, used for reverse lookup by id. */
+  remoteSkillId?: string
 }
 
 // ── Skill record ────────────────────────────────────────────────────────────

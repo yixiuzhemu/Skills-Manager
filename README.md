@@ -37,6 +37,11 @@ calls typed routes with `fetch` and re-pulls a snapshot after every mutation.
   install advertised skills.
 - **Updates & diff** — check upstream versions and review an inline unified diff
   before applying an update.
+- **On-demand remote resolution** — when another host plugin asks
+  `ctx.skillsManager.resolveSkillById(id)` for a skill that is not installed
+  locally, the manager can resolve it from a single configured endpoint,
+  download the presigned archive, and install it. Disabled unless
+  `remoteSkillResolver.baseUrl` is set; a miss never fans out to other servers.
 - **Local persistence** — JSON documents under `~/.dsh/skills-manager/` with
   revision tracking and file watching.
 
@@ -122,6 +127,9 @@ resolve to a local setup):
 | `githubToken` | `string` | `''` | Optional bearer token for authenticated requests. |
 | `trashRetentionDays` | `number` | `30` | Days a trashed skill is kept before auto-purge. |
 | `scanOnStart` | `boolean` | `true` | Whether to run a discovery scan at startup. |
+| `remoteSkillResolver.baseUrl` | `string` | `''` | Resolver endpoint for on-demand remote skills; **empty disables the feature**. |
+| `remoteSkillResolver.token` | `string` | `''` | Optional bearer token, sent to the resolver endpoint only (never to the download host). |
+| `remoteSkillResolver.timeoutMs` | `number` | `30000` | Per-request timeout for the resolve + download steps. |
 
 ## Scripts
 
@@ -148,10 +156,11 @@ src/
   importer.ts     zip / folder / file import + create
   diff.ts         LCS unified diff
   github.ts       GitHub repo & company source remotes
+  remote-skill.ts On-demand remote skill resolution (by external id)
   skill-file.ts   SKILL.md parsing / serialization / id hashing
   types.ts        Shared wire vocabulary + Cordis event augmentation
   client/         Browser half (panel, api client, wire types, locales, styles)
-test/             node:test suites (http + api)
+test/             node:test suites (http + api + remote-skill)
 DESIGN.md         Full design document
 ```
 

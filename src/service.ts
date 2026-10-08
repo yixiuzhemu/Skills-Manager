@@ -31,7 +31,7 @@ import type {
 import { JsonFileStore, ensureDir, getBaseDir, pathExists, readTextFile, writeTextFile } from './file-store.ts'
 import { parseSkillFile, readVersion, serializeSkillFile, skillId, toKebabCase, SKILL_FILE } from './skill-file.ts'
 import { discoverSkills, type ScanPlan } from './scanner.ts'
-import { createSkill as createManagedSkill, importSkill as importManagedSkill, managedDirFor } from './importer.ts'
+import { createSkill as createManagedSkill, importSkill as importManagedSkill, installFromZipBytes, managedDirFor, type InstalledArchive } from './importer.ts'
 import { computeDiff } from './diff.ts'
 import {
   downloadRepoSkillDir,
@@ -43,6 +43,7 @@ import {
   type CompanySkillEntry,
   type RemoteOptions,
 } from './github.ts'
+import { downloadSkillArchive, isResolverEnabled, resolveRemoteSkill, type RemoteSkillRef } from './remote-skill.ts'
 
 /** Cordis service key and Typert wire namespace (segment grammar forbids `/`). */
 const SERVICE_KEY = 'skillsManager'
@@ -71,6 +72,8 @@ export interface SkillsManagerConfig {
   trashRetentionDays: number
   /** Whether to run a discovery scan during startup. */
   scanOnStart: boolean
+  /** On-demand remote skill resolver; an empty `baseUrl` disables resolution. */
+  remoteSkillResolver: { baseUrl: string; token: string; timeoutMs: number }
 }
 
 /** Persisted registry document: the merged skill list plus hidden discovered ids. */
@@ -109,6 +112,8 @@ export class SkillsManager extends TypertRemoteService {
   private readonly company: JsonFileStore<CompanyDoc>
   /** Lifecycle control for the registered skill provider, used to invalidate catalogs. */
   private providerControl: SkillProviderControl | undefined
+  /** In-flight remote resolutions keyed by external id, deduping concurrent requests. */
+  private readonly inflightResolves = new Map<string, Promise<SkillRecord | undefined>>()
   /** Absolute root of managed skill copies. */
   readonly managedRoot: string
   /** Absolute root of trashed skill copies. */
@@ -238,6 +243,36 @@ export class SkillsManager extends TypertRemoteService {
     const record = this.findRecord(id)
     if (record === undefined) return undefined
     return readTextFile(record.originPath)
+  }
+
+  /**
+   * Resolve a skill by its external catalog id, installing it on demand when it
+   * is not present locally. This is the entry point other host plugins use to
+   * fetch an enabled skill by id: the `ctx.skills` registry is name-addressed
+   * and only lists already-installed skills, so an on-demand by-id fetch must go
+   * through the manager directly. Remote resolution requires a configured
+   * `remoteSkillResolver.baseUrl`; without one — or when the single configured
+   * endpoint reports a miss — this resolves to `undefined` and never fans out to
+   * another server.
+   * @param id - the external skill catalog id.
+   * @returns the installed record, or `undefined` when it cannot be resolved.
+   */
+  @Remote
+  async resolveSkillById(id: string): Promise<SkillRecord | undefined> {
+    if (id.length === 0) return undefined
+    // Already installed? Match the external catalog id first, then the internal id.
+    const local = this.findByRemoteId(id) ?? this.findRecord(id)
+    if (local !== undefined) return local
+    // The feature is disabled without a configured resolver base URL.
+    if (!isResolverEnabled(this.options.remoteSkillResolver)) return undefined
+    // Dedup concurrent resolutions for the same id.
+    const inflight = this.inflightResolves.get(id)
+    if (inflight !== undefined) return inflight
+    const task = this.downloadAndInstallRemote(id).finally(() => {
+      this.inflightResolves.delete(id)
+    })
+    this.inflightResolves.set(id, task)
+    return task
   }
 
   /** Re-scan every discovery root and reconcile against persisted enable state. */
@@ -635,6 +670,56 @@ export class SkillsManager extends TypertRemoteService {
     const hidden = this.registry.data.hidden.filter(item => item !== record.id)
     await this.registry.save({ skills, hidden })
     this.emitChanged()
+  }
+
+  /** Find an installed record by its external remote catalog id. */
+  findByRemoteId(remoteId: string): SkillRecord | undefined {
+    return this.registry.data.skills.find(record => record.sourceDetail?.remoteSkillId === remoteId)
+  }
+
+  /**
+   * Download and install one remotely resolved skill. Any resolver, download, or
+   * materialization failure resolves to `undefined` (treated as "not found") so a
+   * by-id query never rejects and never fans out beyond the configured endpoint.
+   * @param id - the external skill catalog id.
+   */
+  private async downloadAndInstallRemote(id: string): Promise<SkillRecord | undefined> {
+    const config = this.options.remoteSkillResolver
+    let ref: RemoteSkillRef | undefined
+    let bytes: Uint8Array
+    try {
+      ref = await resolveRemoteSkill(id, config)
+      if (ref === undefined) return undefined
+      bytes = await downloadSkillArchive(ref.downloadUrl, config.timeoutMs)
+    } catch {
+      return undefined
+    }
+    const internalId = skillId('managed', `remote:${id}`)
+    let installed: InstalledArchive
+    try {
+      installed = await installFromZipBytes(bytes, internalId, this.managedRoot)
+    } catch {
+      return undefined
+    }
+    const parsed = parseSkillFile(installed.raw, toKebabCase(ref.skillName) || installed.fallbackName)
+    const version = readVersion(parsed.frontmatter)
+    const now = Date.now()
+    const record: SkillRecord = {
+      id: internalId,
+      name: parsed.frontmatter.name,
+      description: parsed.frontmatter.description,
+      source: 'managed',
+      enabled: true,
+      originPath: join(installed.managedDir, SKILL_FILE),
+      managedPath: installed.managedDir,
+      frontmatter: parsed.frontmatter,
+      sourceDetail: { remoteSkillId: id },
+      importedAt: now,
+      updatedAt: now,
+      ...(version !== undefined ? { version } : {}),
+    }
+    await this.upsertRecord(record)
+    return record
   }
 
   /** Build the discovery plan from resolved configuration. */

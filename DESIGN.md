@@ -54,7 +54,7 @@ Skills-Manager 是一个基于 [Cordis](https://cordis.js.org/) 插件体系的 
 
 - **`SkillRecord`**：注册表追踪的单个技能。`id` 为 `source::relativePath` 的哈希；包含 `name`、`description`、`source`、`enabled`、只读的 `originPath`、可选的 `managedPath`、解析后的 `frontmatter`、来源明细 `sourceDetail` 及时间戳/版本。
 - **`SkillFrontmatter`**：从 `SKILL.md` 解析的 YAML frontmatter（`name`、`description`、`whenToUse`、`disableModelInvocation`、`userInvocable`、`metadata`）。
-- **`SourceDetail`**：来源附加元数据（仓库 URL/分支、Agent 类型、项目路径、企业源 ID）。
+- **`SourceDetail`**：来源附加元数据（仓库 URL/分支、Agent 类型、项目路径、企业源 ID、远程解析外部 id `remoteSkillId`——用于按外部目录 id 反查已安装的远程技能，见 §6.2）。
 - **`TrashRecord`**：回收站条目，包裹删除时的 `originalSkill`，含 `deletedAt`、`trashPath`、默认 30 天后到期的 `expiresAt`。
 
 ### 3.3 仓库与企业源
@@ -156,8 +156,9 @@ DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dsh-skills-m
 
 - `test/http.test.ts`：通过 `registerHttpApi` 挂载真实路由 handler，以 `Readable` 伪造 `IncomingMessage`、记录型对象伪造 `ServerResponse`，并用 `Proxy` 版 `SkillsManager` mock 记录调用 / 注入返回值与异常；黑盒覆盖来源安全（same-origin / loopback / cross-site 拒绝）、方法分派（GET/HEAD/POST/405）、读写路由、marker/content-type/JSON/4MB 上限守卫、`{ ok, data }` 信封与 403/405/400/413/404 状态码。
 - `test/api.test.ts`：以桩替换全局 `fetch`，覆盖信封拆包（`data ?? null`）、`ok:false` / HTTP 错误 / 非 JSON → `ApiError`（含 code）、GET 查询编码、POST marker/内容类型/请求体契约。
+- `test/remote-skill.test.ts`：以桩替换全局 `fetch`，覆盖按需远程解析纯逻辑（见 §6.2）——base url 归一化（补 scheme / 去尾斜杠 / 空值禁用）、固定端点 `/skills/skills/{id}/download` 构造与编码、信封解析（命中 / `success:false` / 缺 `downloadUrl` → miss）、解析请求契约（bearer 令牌 + `Accept` 头、404 → `undefined`、非 2xx 抛 `RemoteSkillError`、无 base url 时不发起请求），以及归档下载（**令牌不转发**给 OSS 下载域、返回字节、非 2xx 抛错）。
 
-> 两个被测模块（`src/http.ts`、`src/client/api.ts`）均为纯 `import type` 模块、无运行时依赖边，故测试完全隔离，无需加载 Cordis / 服务实现。当前 **39 个用例全绿**（9 个 suite）。
+> `src/http.ts`、`src/client/api.ts` 均为纯 `import type` 模块、无运行时依赖边；`src/remote-skill.ts` 亦无 Cordis / 文件系统依赖，仅通过全局 `fetch` 触网。三者测试均完全隔离，无需加载 Cordis / 服务实现。当前 **57 个用例全绿**（13 个 suite）。
 
 ## 6. 包导出与运行时约定
 
@@ -188,6 +189,25 @@ DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dsh-skills-m
 - **客户端类型隔离**：`src/types.ts` 含 `declare module '@deepseek-ai/cordis'` 事件增强，浏览器程序无法解析；故 `src/client/wire.ts` 复制一份纯数据形状（不含 Cordis 增强）供客户端导入，Host 仍为唯一事实源，两侧手工同步。
 - **参考实现**：同类插件 `@michengai/dsh-skills-manager` 已验证 webServer HTTP 方案；本方案只新增一个 `dsh-host-webserver` peer 依赖（npm 可得），且 `SkillsManager` 的业务方法保持不变，HTTP 处理器仅做转发。
 
+### 6.2 按 id 的远程技能按需解析（on-demand resolver）
+
+当**其它 Host 插件**需要一个按其外部目录 id（形如 `SKxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`）寻址的生效技能、而本地已安装库中并不存在时，`SkillsManager` 可从**单一配置的远程端点**按需解析、下载并安装该技能，随后作为普通受管技能对 harness 生效。该能力经进程内服务方法 `ctx.skillsManager.resolveSkillById(id)` 暴露（`ctx.skills` 是 name 寻址、其 `SkillSummary` 不携带 id，无法承载按需下载，故此能力落在 `skillsManager` 服务面）。
+
+**完整流程（`src/remote-skill.ts` 纯逻辑 + `src/service.ts` 编排）：**
+
+1. **本地优先**：`resolveSkillById(id)` 先按 `sourceDetail.remoteSkillId` 反查已安装记录（`findByRemoteId`），再退化为按内部 id `findRecord(id)`；命中即返回，不触网。
+2. **开关判定**：`isResolverEnabled` 检查 `remoteSkillResolver.baseUrl` 是否非空——**未配置 URL 则功能关闭**，直接返回 `undefined`（查询表现为「未查询到对应技能」）。
+3. **解析引用**：向 `${baseUrl}/skills/skills/{id}/download` 发起一次 `GET`，携带 `Accept: application/json`，并在配置了 token 时附 `authorization: Bearer <token>`；解析响应信封 `{ success, data: { downloadUrl, skillName } }` 得到预签名下载地址。
+4. **下载归档**：对 `data.downloadUrl`（通常是对象存储的预签名地址，**不同 origin**）再发一次 `GET` 取回 zip 字节——此步**不转发 bearer 令牌**，因该 URL 已由自身签名授权。
+5. **安装落库**：`installFromZipBytes` 解压物化到 `managed/<internalId>/`，解析 `SKILL.md`，以内部 id `skillId('managed', 'remote:' + 外部id)`（保证幂等）构建 `SkillRecord`（`source:'managed'`、`enabled:true`、`sourceDetail.remoteSkillId` 记外部 id），`upsertRecord` 写入注册表并触发变更事件，随后即可被 `ctx.skills` 与其它消费方使用。
+
+**两条硬性约束：**
+
+- **不扩散（no fan-out）**：解析只与那一个配置端点通信；miss（404、`success:false`、或缺失 `downloadUrl`）一律产出 `undefined`，**绝不重试其它 skills 远程服务端**。
+- **令牌收敛（token confinement）**：bearer 令牌只发给 resolver 端点；预签名下载 URL 指向不同 origin，归档请求不携带任何 `authorization` 头。
+
+**健壮性**：每次 HTTP 请求以 `AbortSignal.timeout` 施加超时（`remoteSkillResolver.timeoutMs`，默认 30s）；`inflightResolves` Map 对同一 id 的并发解析去重，避免重复下载/安装；网络失败、非 2xx（404 除外）、解析或安装异常均被收敛为 `undefined`，不向调用方抛错。配置项见 §8 的 `index.ts` Config schema（`remoteSkillResolver.baseUrl` / `token` / `timeoutMs`）。
+
 ## 7. 技术栈
 
 - **语言**：TypeScript ^6.0.3
@@ -209,14 +229,15 @@ DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dsh-skills-m
 **Host 纯逻辑模块（无 Cordis 依赖，可独立测试）：**
 - `src/skill-file.ts`：`SKILL.md` frontmatter 解析/序列化、`skillId` 哈希、kebab-case 归一、版本读取、目录读取。
 - `src/scanner.ts`：多源发现（dsh-global / project / codex / claude / copilot / 额外目录），`originPath` 指向 `SKILL.md`。
-- `src/importer.ts`：`zip` / `folder` / `file` 三形态导入 + 从零创建，物化到 `managed/<id>/`。
+- `src/importer.ts`：`zip` / `folder` / `file` 三形态导入 + 从零创建，物化到 `managed/<id>/`；抽出共享解压核心 `extractZip` 并对外暴露 `installFromZipBytes`（直接从 zip 字节安装，供远程按需解析复用，见 §6.2）。
 - `src/diff.ts`：LCS 统一 diff（分块 + 上下文窗口 + 大输入降级保护）。
 - `src/github.ts`：GitHub 仓库源（trees API 定位 + raw 下载）与企业源（`api` / `git`）远程操作。
+- `src/remote-skill.ts`：按 id 的远程技能按需解析纯逻辑（见 §6.2）——base url 归一化、固定下载端点构造、响应信封解析、解析请求（携 bearer 令牌）与归档下载（**不转发令牌**）两步 HTTP；无 Cordis / 文件系统依赖，仅用全局 `fetch`，可独立单测。
 
 **Host 编排层：**
-- `src/service.ts`：`SkillsManager`（继承 `TypertRemoteService`，服务键 `skillsManager`）。以四个 `JsonFileStore` 持久化 `registry.json` / `trash.json` / `repos.json` / `company.json`；实现扫描/导入/创建/启停/软删除/回收站（恢复·清除·清空·30 天过期清理）/仓库源/企业源/更新检查/diff/应用更新；在各提交点 `emit` 三个事件；注册 `ctx.skills` provider 使启用的技能对 harness 生效。公共方法以 `@Remote` 装饰——这些标记在当前架构下**惰性**（仅记录原型描述符，运行时无副作用），保留以兼容将来若接入 typert 网关。
+- `src/service.ts`：`SkillsManager`（继承 `TypertRemoteService`，服务键 `skillsManager`）。以四个 `JsonFileStore` 持久化 `registry.json` / `trash.json` / `repos.json` / `company.json`；实现扫描/导入/创建/启停/软删除/回收站（恢复·清除·清空·30 天过期清理）/仓库源/企业源/更新检查（`checkUpdates`）/diff（`getDiff`）/应用更新（`applyUpdate`）；在各提交点 `emit` 三个事件；注册 `ctx.skills` provider 使启用的技能对 harness 生效。另提供 `resolveSkillById(id)`（§6.2）：本地优先（`findByRemoteId` → `findRecord`），未命中且已配置 resolver 时编排「解析→下载→`installFromZipBytes`→`upsertRecord`」，并以 `inflightResolves` Map 对同一 id 并发去重。公共方法以 `@Remote` 装饰——这些标记在当前架构下**惰性**（仅记录原型描述符，运行时无副作用），保留以兼容将来若接入 typert 网关。
 - `src/http.ts`：**Host↔Client 的活传输层**。在 `ctx.webServer` 上注册一个 `prefix` 路由 `/api/skills-manager`，将 GET/POST 请求分派到 `SkillsManager` 方法；统一以 `{ ok: true, data }` / `{ ok: false, code, error }` JSON 信封响应。安全校验：来源必须为 loopback 主机（或 `sec-fetch-site: same-origin|none`），且每个写操作 `POST` 必须携带 `x-dsh-skills-manager` 标记头与 `application/json` 内容类型；请求体上限 4MB。
-- `src/index.ts`：插件入口（`Config` schema + `inject: ['skills', 'webServer']` + `apply`），实例化服务、同步注册 provider、以 `ctx.effect` 注册 HTTP 路由并驱动 store 启停，并增强 `Context` 暴露 `ctx.skillsManager`。
+- `src/index.ts`：插件入口（`Config` schema + `inject: ['skills', 'webServer']` + `apply`），实例化服务、同步注册 provider、以 `ctx.effect` 注册 HTTP 路由并驱动 store 启停，并增强 `Context` 暴露 `ctx.skillsManager`。`Config` schema 包含 `remoteSkillResolver`（`baseUrl` / `token` / `timeoutMs`，默认均为空/30000）——`baseUrl` 为空时远程按需解析功能关闭（§6.2）。
 
 **Client 半边：**
 - `src/client/index.ts`：浏览器入口，导出 `name` / `inject: ['slots', 'locale']` / `apply(ctx)`；注册 i18n 字典并将面板组件贡献到 `settings.section` 插槽（`id: skills-manager`）。
@@ -227,7 +248,7 @@ DSH bundle 补丁，将本插件以 `id: skills-manager`、`name: '@dsh-skills-m
 - `src/client/styles.module.css`：CSS Modules 样式（绑定 `--dsw-alias-*` 设计令牌，带字面回退）。
 - `src/client/css.d.ts`：`*.module.css` 的环境声明。
 
-**验证结果：** `tsc -p tsconfig.json --noEmit`、`tsc -p tsconfig.client.json --noEmit`、`tsc -p tsconfig.test.json --noEmit` 均无错；`npm run build` 产出 `lib/`（含 `http.js`）与 `client/client.js`（~60KB，`react` 外部化、CSS 内联、banner 正确）；`normalize-client-banner` 与 `preflight` 均通过；`npm run test` **39/39 用例全绿**（`node:test`，见 §5.7）。
+**验证结果：** `tsc -p tsconfig.json --noEmit`、`tsc -p tsconfig.client.json --noEmit`、`tsc -p tsconfig.test.json --noEmit` 均无错；`npm run build` 产出 `lib/`（含 `http.js`）与 `client/client.js`（~60KB，`react` 外部化、CSS 内联、banner 正确）；`normalize-client-banner` 与 `preflight` 均通过；`npm run test` **57/57 用例全绿**（`node:test`，见 §5.7）。
 
 ## 9. 后续可选优化
 
@@ -237,4 +258,4 @@ Host 与 Client 两个半边均已交付并通过全链路验证。以下为可�
 2. **事件驱动刷新**：目前面板在每次变更后主动 `reload()` 快照；可进一步订阅 Host 转发的 `skills-manager/changed` 等事件实现多窗口实时同步（需经 webServer 的 SSE 或宿主事件转发机制）。
 3. **状态管理**：面板当前用 React 内置 hooks 管理状态；若交互进一步复杂化，可引入已列于依赖的 Zustand + Immer。
 4. **错误本地化**：Host 返回的 `error` 为原始消息字符串；可扩展为带 `code` + `params` 的结构化错误，由客户端 `t(code, params)` 本地化（参考项目已采用此模式）。
-5. **测试覆盖扩展**：`src/http.ts`（路由分派 / 安全校验 / 信封）与 `src/client/api.ts`（信封拆包 / 错误码）的单元测试**已落地**（见 §5.7，39 用例全绿）；后续可为 Host 纯逻辑模块（`diff.ts` / `skill-file.ts` / `importer.ts` / `scanner.ts`）与 `section.ts` 组件补充测试。
+5. **测试覆盖扩展**：`src/http.ts`（路由分派 / 安全校验 / 信封）、`src/client/api.ts`（信封拆包 / 错误码）与 `src/remote-skill.ts`（base url 归一 / 端点构造 / 信封解析 / 解析与下载契约）的单元测试**已落地**（见 §5.7，57 用例全绿）；后续可为其余 Host 纯逻辑模块（`diff.ts` / `skill-file.ts` / `importer.ts` / `scanner.ts`）与 `section.ts` 组件补充测试。

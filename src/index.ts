@@ -34,6 +34,11 @@ export const Config = Schema.object({
   githubToken: Schema.string().default(''),
   trashRetentionDays: Schema.number().default(30),
   scanOnStart: Schema.boolean().default(true),
+  remoteSkillResolver: Schema.object({
+    baseUrl: Schema.string().default(''),
+    token: Schema.string().default(''),
+    timeoutMs: Schema.number().default(30000),
+  }).default({ baseUrl: '', token: '', timeoutMs: 30000 }),
 })
 
 /**
